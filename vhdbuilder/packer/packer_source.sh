@@ -789,6 +789,9 @@ copyPackerFiles() {
     FMT_SVC_SRC=/home/packer/format-mount-nvme-root.service
     FMT_SVC_DEST=/etc/systemd/system/format-mount-nvme-root.service
     cpAndMode $FMT_SVC_SRC $FMT_SVC_DEST 600
+    FMT_SVC_SRC=/home/packer/format-mount-bind.conf
+    FMT_SVC_DEST=/etc/systemd/system/bind-mount.service.d/10-fmtmount.conf
+    cpAndMode $FMT_SVC_SRC $FMT_SVC_DEST 600
     FMT_SVC_SRC=/home/packer/format-mount-kubelet.conf
     FMT_SVC_DEST=/etc/systemd/system/kubelet.service.d/11-fmtmount.conf
     cpAndMode $FMT_SVC_SRC $FMT_SVC_DEST 600

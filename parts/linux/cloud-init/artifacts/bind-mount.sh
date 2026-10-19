@@ -4,45 +4,47 @@ set -o nounset
 set -o pipefail
 set -x
 
-# Bind mount kubelet to ephemeral storage on startup, as necessary.
+# Bind mount kubelet to prepared ephemeral storage on startup.
 #
 # This fixes an issue with kubelet's ability to detect allocatable
-# capacity for Node ephemeral-storage. On Azure, ephemeral-storage
-# should correspond to the temp disk if a VM has one. This script makes
-# that true by bind mounting the temp disk to /var/lib/kubelet, so
-# kubelet thinks it's located on the temp disk (/dev/sdb). This results
-# in correct calculation of ephemeral-storage capacity.
-
-# if aks ever supports alternatives besides temp disk
-# this mount point will need to be updated
-MOUNT_POINT="/mnt/aks"
-
-KUBELET_MOUNT_POINT="${MOUNT_POINT}/kubelet"
-KUBELET_DIR="/var/lib/kubelet"
-SENTINEL_FILE="/opt/azure/containers/bind-sentinel"
+# capacity for Node ephemeral-storage. /mnt/aks is backed by the temporary
+# disk, or by local NVMe RAID prepared by the GB storage service. Binding
+# its kubelet directory at /var/lib/kubelet exposes that storage's capacity.
 
 prepareKubeletDisk() {
-    mkdir -p "${MOUNT_POINT}"
+    local mount_point="${1:-/mnt/aks}"
+    local kubelet_dir="${2:-/var/lib/kubelet}"
+    local kubelet_mount_point="${mount_point}/kubelet"
 
-    # A reimage replaces the OS disk and its sentinel, but can retain kubelet
-    # state on the temporary disk. Reset that stale state before migrating the
-    # fresh OS-disk kubelet directory.
-    if [ ! -e "$SENTINEL_FILE" ]; then
-        rm -rf --one-file-system "${KUBELET_MOUNT_POINT}"
-        mv "${KUBELET_DIR}" "${KUBELET_MOUNT_POINT}"
-        touch "${SENTINEL_FILE}"
+    mkdir -p "${mount_point}"
+    if mountpoint -q "${kubelet_dir}"; then
+        if [ ! "${kubelet_dir}" -ef "${kubelet_mount_point}" ]; then
+            echo "${kubelet_dir} is already mounted from a different directory" >&2
+            return 1
+        fi
+    else
+        mkdir -p "${kubelet_dir}"
+        # A populated OS-disk directory contains fresh provisioning state,
+        # including after an OS reimage. An empty one is left by migration and
+        # must not replace retained kubelet state on an ordinary reboot.
+        local source_entry
+        source_entry=$(find "${kubelet_dir}" -mindepth 1 -maxdepth 1 -print -quit)
+        if [ -n "${source_entry}" ]; then
+            rm -rf --one-file-system "${kubelet_mount_point}"
+            mv "${kubelet_dir}" "${kubelet_mount_point}"
+        elif [ ! -d "${kubelet_mount_point}" ]; then
+            mv "${kubelet_dir}" "${kubelet_mount_point}"
+        fi
+
+        mkdir -p "${kubelet_dir}"
+        mount --bind "${kubelet_mount_point}" "${kubelet_dir}"
     fi
-
-    # On every boot, bind mount the kubelet directory back to the expected
-    # location before kubelet itself may start.
-    mkdir -p "${KUBELET_DIR}"
-    mount --bind "${KUBELET_MOUNT_POINT}" "${KUBELET_DIR}"
 
     # The directory holds the kubelet kubeconfig and TLS material, so it must
     # never be writable by unprivileged local users. Preserve its existing
     # read and execute permissions while removing group and other write access.
-    chown root:root "${KUBELET_DIR}"
-    chmod go-w "${KUBELET_DIR}"
+    chown root:root "${kubelet_dir}"
+    chmod go-w "${kubelet_dir}"
 }
 
 # Prevent ShellSpec from executing the production entry point when sourcing.

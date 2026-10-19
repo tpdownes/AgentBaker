@@ -131,6 +131,11 @@
     },
     {
       "type": "file",
+      "source": "parts/linux/cloud-init/artifacts/ubuntu/gb/format-mount-bind.conf",
+      "destination": "/home/packer/format-mount-bind.conf"
+    },
+    {
+      "type": "file",
       "source": "parts/linux/cloud-init/artifacts/ubuntu/gb/format-mount-kubelet.conf",
       "destination": "/home/packer/format-mount-kubelet.conf"
     },

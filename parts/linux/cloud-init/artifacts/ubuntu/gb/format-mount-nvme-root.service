@@ -1,5 +1,5 @@
 [Unit]
-Description=Format NVMe local disk and mount Kubelet there
+Description=Prepare local NVMe RAID and mount it at /mnt/aks
 Requires=mnt.mount
 After=mnt.mount
 
